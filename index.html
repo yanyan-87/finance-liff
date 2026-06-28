@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>記一筆支出</title>
+  <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #F5F4F2;
+      min-height: 100vh;
+      padding: 20px 16px 40px;
+    }
+    h2 {
+      font-size: 17px;
+      font-weight: 600;
+      color: #2C2C2A;
+      margin-bottom: 20px;
+    }
+    .section {
+      background: #fff;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .section-label {
+      font-size: 11px;
+      color: #888780;
+      margin-bottom: 10px;
+      letter-spacing: 0.05em;
+    }
+    .chip-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      padding: 7px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      border: 1.5px solid #E0DED8;
+      color: #2C2C2A;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .chip.selected {
+      border-color: var(--sel-color);
+      background: var(--sel-bg);
+      color: var(--sel-color);
+      font-weight: 500;
+    }
+    .amount-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .amount-prefix {
+      font-size: 16px;
+      color: #888780;
+      white-space: nowrap;
+    }
+    .amount-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 28px;
+      font-weight: 500;
+      color: #2C2C2A;
+      background: transparent;
+      width: 100%;
+    }
+    .amount-input::placeholder { color: #C8C6C0; }
+    .note-input {
+      width: 100%;
+      border: none;
+      outline: none;
+      font-size: 14px;
+      color: #2C2C2A;
+      background: transparent;
+      resize: none;
+      height: 40px;
+    }
+    .note-input::placeholder { color: #C8C6C0; }
+    .default-hint {
+      font-size: 11px;
+      color: #B0AEA8;
+      margin-top: 8px;
+    }
+    .default-hint span { color: #185FA5; }
+    .btn-confirm {
+      width: 100%;
+      padding: 15px;
+      border-radius: 14px;
+      border: none;
+      background: #2C2C2A;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: opacity 0.15s;
+    }
+    .btn-confirm:active { opacity: 0.8; }
+    .btn-confirm:disabled { background: #C8C6C0; cursor: not-allowed; }
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2C2C2A;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <h2>記一筆支出</h2>
+
+  <div class="section">
+    <div class="section-label">分類</div>
+    <div class="chip-grid" id="categoryGrid">
+      <div class="chip" data-value="餐費" data-color="#D85A30" data-bg="#FAECE7">🍴 餐費</div>
+      <div class="chip" data-value="通勤" data-color="#185FA5" data-bg="#E6F1FB">🚇 通勤</div>
+      <div class="chip" data-value="購物" data-color="#993556" data-bg="#FBEAF0">🛍️ 購物</div>
+      <div class="chip" data-value="旅遊" data-color="#0F6E56" data-bg="#E1F5EE">✈️ 旅遊</div>
+      <div class="chip" data-value="娛樂" data-color="#534AB7" data-bg="#EEEDFE">🎮 娛樂</div>
+      <div class="chip" data-value="保險" data-color="#5F5E5A" data-bg="#F1EFE8">🛡️ 保險</div>
+      <div class="chip" data-value="醫療" data-color="#A32D2D" data-bg="#FCEBEB">🏥 醫療</div>
+      <div class="chip" data-value="其他" data-color="#5F5E5A" data-bg="#F1EFE8">📋 其他</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">金額</div>
+    <div class="amount-row">
+      <div class="amount-prefix">NT$</div>
+      <input class="amount-input" type="number" id="amount" placeholder="0" inputmode="numeric" />
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">付款方式（預設依分類自動帶入）</div>
+    <div class="chip-grid" id="paymentGrid">
+      <div class="chip" data-value="中信帳戶" data-color="#185FA5" data-bg="#E6F1FB">中信帳戶</div>
+      <div class="chip" data-value="台新信用卡" data-color="#185FA5" data-bg="#E6F1FB">台新信用卡</div>
+      <div class="chip" data-value="郵局信用卡" data-color="#185FA5" data-bg="#E6F1FB">郵局信用卡</div>
+      <div class="chip" data-value="中信信用卡" data-color="#185FA5" data-bg="#E6F1FB">中信信用卡</div>
+      <div class="chip" data-value="現金" data-color="#185FA5" data-bg="#E6F1FB">現金</div>
+    </div>
+    <div class="default-hint" id="defaultHint">請先選擇分類</div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">備註（選填）</div>
+    <textarea class="note-input" id="note" placeholder="例：午餐、超商、油錢…"></textarea>
+  </div>
+
+  <button class="btn-confirm" id="submitBtn" disabled>確認記帳</button>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const LIFF_ID = '2010535186-yYeXj3G2';
+    const N8N_WEBHOOK = 'https://yan-n8n.zeabur.app/webhook/liff-expense';
+
+    const categoryDefaults = {
+      '餐費': '中信帳戶',
+      '通勤': '現金',
+      '購物': '台新信用卡',
+      '旅遊': '台新信用卡',
+      '娛樂': '台新信用卡',
+      '保險': '郵局信用卡',
+      '醫療': '中信帳戶',
+      '其他': '中信帳戶',
+    };
+
+    let selectedCategory = null;
+    let selectedPayment = null;
+
+    function selectChip(grid, value) {
+      grid.querySelectorAll('.chip').forEach(c => {
+        c.classList.remove('selected');
+        c.style.removeProperty('--sel-color');
+        c.style.removeProperty('--sel-bg');
+      });
+      const target = [...grid.querySelectorAll('.chip')].find(c => c.dataset.value === value);
+      if (target) {
+        target.style.setProperty('--sel-color', target.dataset.color);
+        target.style.setProperty('--sel-bg', target.dataset.bg);
+        target.classList.add('selected');
+      }
+    }
+
+    document.getElementById('categoryGrid').addEventListener('click', e => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      selectedCategory = chip.dataset.value;
+      selectChip(document.getElementById('categoryGrid'), selectedCategory);
+
+      const def = categoryDefaults[selectedCategory];
+      selectedPayment = def;
+      selectChip(document.getElementById('paymentGrid'), def);
+      document.getElementById('defaultHint').innerHTML =
+        `預設付款方式：<span>${def}</span>，可點選更改`;
+      checkReady();
+    });
+
+    document.getElementById('paymentGrid').addEventListener('click', e => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      selectedPayment = chip.dataset.value;
+      selectChip(document.getElementById('paymentGrid'), selectedPayment);
+      document.getElementById('defaultHint').innerHTML =
+        `已選擇：<span>${selectedPayment}</span>`;
+    });
+
+    document.getElementById('amount').addEventListener('input', checkReady);
+
+    function checkReady() {
+      const amount = document.getElementById('amount').value;
+      document.getElementById('submitBtn').disabled = !(selectedCategory && amount > 0);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      const amount = document.getElementById('amount').value;
+      const note = document.getElementById('note').value;
+      const today = new Date().toISOString().slice(0, 10);
+
+      const payload = {
+        intent: '記錄支出',
+        category: selectedCategory,
+        amount: parseFloat(amount),
+        payment_method: selectedPayment,
+        date: today,
+        note: note || null,
+        source: 'liff'
+      };
+
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').textContent = '送出中...';
+
+      try {
+        await fetch(N8N_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        showToast('✅ 記帳完成！');
+        setTimeout(() => liff.closeWindow(), 1500);
+      } catch (err) {
+        showToast('❌ 送出失敗，請重試');
+        document.getElementById('submitBtn').disabled = false;
+        document.getElementById('submitBtn').textContent = '確認記帳';
+      }
+    });
+
+    liff.init({ liffId: LIFF_ID }).catch(err => console.error(err));
+  </script>
+</body>
+</html>

@@ -186,6 +186,18 @@
 
     let selectedCategory = null;
     let selectedPayment = null;
+    let lineUserId = null;
+
+    // 初始化 LIFF 並取得 userId
+    liff.init({ liffId: LIFF_ID }).then(() => {
+      if (liff.isLoggedIn()) {
+        liff.getProfile().then(profile => {
+          lineUserId = profile.userId;
+        }).catch(err => console.error('getProfile error:', err));
+      } else {
+        liff.login();
+      }
+    }).catch(err => console.error('liff init error:', err));
 
     function selectChip(grid, value) {
       grid.querySelectorAll('.chip').forEach(c => {
@@ -250,7 +262,8 @@
         payment_method: selectedPayment,
         date: today,
         note: note || null,
-        source: 'liff'
+        source: 'liff',
+        userId: lineUserId
       };
 
       document.getElementById('submitBtn').disabled = true;
@@ -270,8 +283,6 @@
         document.getElementById('submitBtn').textContent = '確認記帳';
       }
     });
-
-    liff.init({ liffId: LIFF_ID }).catch(err => console.error(err));
   </script>
 </body>
 </html>

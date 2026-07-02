@@ -295,17 +295,23 @@
       .map(e => e[0]);
   }
 
-  function bindTagClicks() {
-    document.querySelectorAll('#tagRow .tag, #morePanel .tag').forEach(el => {
-      if (!el.classList.contains('more-tag')) {
-        el.addEventListener('click', () => {
-          const noteInput = document.getElementById('noteInput');
-          noteInput.value = el.dataset.tag;
-          noteInput.focus();
-        });
-      }
-    });
+  document.getElementById('tagRow').addEventListener('click', function(e) {
+  const tag = e.target.closest('.tag');
+  if (tag && !tag.classList.contains('more-tag')) {
+    const noteInput = document.getElementById('noteInput');
+    noteInput.value = tag.dataset.tag;
+    noteInput.focus();
   }
+});
+
+document.getElementById('morePanel').addEventListener('click', function(e) {
+  const tag = e.target.closest('.tag');
+  if (tag) {
+    const noteInput = document.getElementById('noteInput');
+    noteInput.value = tag.dataset.tag;
+    noteInput.focus();
+  }
+});
 
   function renderCategories() {
     const cats = mode === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;

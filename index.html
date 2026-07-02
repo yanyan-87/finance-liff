@@ -51,7 +51,7 @@
       transition: all 0.15s;
       user-select: none;
     }
-    .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 28px; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 0; }
     .tag {
       padding: 4px 10px;
       border-radius: 12px;
@@ -96,7 +96,7 @@
       background: transparent;
     }
     .amount-input::placeholder { color: #D0CEC8; }
-    .pay-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pay-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
     .pay-chip {
       flex: 1;
       min-width: 60px;
@@ -110,6 +110,12 @@
       transition: all 0.15s;
       user-select: none;
     }
+    .pay-chip.pay-selected {
+      border-color: #185FA5;
+      background: #E6F1FB;
+      color: #185FA5;
+      font-weight: 500;
+    }
     .pay-more {
       padding: 7px 12px;
       border-radius: 10px;
@@ -119,12 +125,17 @@
       cursor: pointer;
       white-space: nowrap;
     }
+    .pay-selected-hint {
+      font-size: 11px;
+      color: #185FA5;
+      margin-bottom: 6px;
+      display: none;
+    }
     .dropdown {
       display: none;
       background: #fff;
       border: 1.5px solid #E0DED8;
       border-radius: 10px;
-      margin-top: 6px;
       overflow: hidden;
     }
     .dropdown.open { display: block; }
@@ -136,7 +147,11 @@
       cursor: pointer;
     }
     .dropdown-item:last-child { border-bottom: none; }
-    .dropdown-item:hover { background: #F5F4F2; }
+    .dropdown-item.item-selected {
+      color: #185FA5;
+      font-weight: 500;
+      background: #F0F6FF;
+    }
     .btn-submit {
       width: 100%;
       padding: 15px;
@@ -163,6 +178,7 @@
       transition: opacity 0.3s;
       pointer-events: none;
       white-space: nowrap;
+      z-index: 999;
     }
     .toast.show { opacity: 1; }
   </style>
@@ -170,13 +186,11 @@
 <body>
 
 <div class="form">
-  <!-- 切換鈕 -->
   <div class="toggle-row">
     <div class="toggle active-expense" id="toggleExpense" onclick="switchMode('expense')">支出</div>
     <div class="toggle inactive" id="toggleIncome" onclick="switchMode('income')">收入</div>
   </div>
 
-  <!-- 分類 -->
   <div class="section">
     <div class="s-label">分類</div>
     <div class="cat-grid" id="catGrid"></div>
@@ -184,7 +198,6 @@
 
   <div class="divider"></div>
 
-  <!-- 備註 -->
   <div class="section">
     <div class="s-label">備註</div>
     <div class="tag-row" id="tagRow"></div>
@@ -194,7 +207,6 @@
 
   <div class="divider"></div>
 
-  <!-- 金額 -->
   <div class="section">
     <div class="s-label">金額</div>
     <div class="amount-row">
@@ -205,10 +217,10 @@
 
   <div class="divider"></div>
 
-  <!-- 付款方式 / 存入帳戶 -->
   <div class="section">
     <div class="s-label" id="payLabel">付款方式</div>
     <div class="pay-row" id="payRow"></div>
+    <div class="pay-selected-hint" id="paySelectedHint"></div>
     <div class="dropdown" id="dropdown"></div>
   </div>
 </div>
@@ -252,10 +264,10 @@
   };
 
   const EXPENSE_TOP3 = ['台新信用卡', '中信信用卡', '現金'];
-  const EXPENSE_MORE = ['中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶','郵局信用卡','國泰信用卡'];
+  const EXPENSE_ALL = ['台新信用卡','中信信用卡','現金','中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶','郵局信用卡','國泰信用卡'];
 
   const INCOME_TOP2 = ['中信帳戶', '郵局帳戶'];
-  const INCOME_MORE = ['台新帳戶','新光帳戶','LINE Bank','國泰帳戶'];
+  const INCOME_ALL = ['中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶'];
 
   let mode = 'expense';
   let selectedCat = null;
@@ -263,17 +275,22 @@
   let selectedPayment = null;
   let lineUserId = null;
 
-  // localStorage helpers
+  // localStorage 存取
   function getTagData(cat) {
     try {
-      return JSON.parse(localStorage.getItem('tags_' + cat) || '{}');
-    } catch { return {}; }
+      const raw = localStorage.getItem('tags_v1_' + cat);
+      return raw ? JSON.parse(raw) : {};
+    } catch(e) { return {}; }
   }
-  function saveTag(cat, tag) {
-    const data = getTagData(cat);
-    data[tag] = (data[tag] || 0) + 1;
-    localStorage.setItem('tags_' + cat, JSON.stringify(data));
+
+  function saveTagToStorage(cat, tag) {
+    try {
+      const data = getTagData(cat);
+      data[tag] = (data[tag] || 0) + 1;
+      localStorage.setItem('tags_v1_' + cat, JSON.stringify(data));
+    } catch(e) { console.error('localStorage save error', e); }
   }
+
   function getSortedTags(cat) {
     const data = getTagData(cat);
     return Object.entries(data)
@@ -285,14 +302,14 @@
     const cats = mode === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
     const grid = document.getElementById('catGrid');
     grid.innerHTML = cats.map(c =>
-      `<div class="cat-chip" data-value="${c.value}" data-color="${c.color}" data-bg="${c.bg}"
-        onclick="selectCat(this)" style="border-color:#E0DED8">
-        ${c.icon} ${c.value}
-      </div>`
+      `<div class="cat-chip" data-value="${c.value}" data-color="${c.color}" data-bg="${c.bg}" onclick="selectCat(this)">${c.icon} ${c.value}</div>`
     ).join('');
     selectedCat = null;
     selectedCatColor = '#2C2C2A';
-    renderTags();
+    document.getElementById('tagRow').innerHTML = '';
+    document.getElementById('morePanel').classList.remove('open');
+    document.getElementById('morePanel').innerHTML = '';
+    document.getElementById('noteInput').value = '';
     renderPayment();
     checkReady();
   }
@@ -304,16 +321,13 @@
       c.style.color = '#2C2C2A';
       c.style.fontWeight = '';
     });
-    const color = el.dataset.color;
-    const bg = el.dataset.bg;
-    el.style.borderColor = color;
-    el.style.background = bg;
-    el.style.color = color;
+    el.style.borderColor = el.dataset.color;
+    el.style.background = el.dataset.bg;
+    el.style.color = el.dataset.color;
     el.style.fontWeight = '500';
     selectedCat = el.dataset.value;
-    selectedCatColor = color;
+    selectedCatColor = el.dataset.color;
 
-    // 預設付款方式
     const def = mode === 'expense' ? EXPENSE_DEFAULTS[selectedCat] : null;
     if (def) setPayment(def);
 
@@ -329,17 +343,19 @@
     if (!selectedCat) { row.innerHTML = ''; return; }
 
     const sorted = getSortedTags(selectedCat);
+    if (sorted.length === 0) { row.innerHTML = ''; return; }
+
     const visible = sorted.slice(0, MAX_VISIBLE_TAGS);
     const hidden = sorted.slice(MAX_VISIBLE_TAGS);
 
     row.innerHTML = visible.map(t =>
-      `<div class="tag" onclick="selectTag('${t}')">${t}</div>`
+      `<div class="tag" onclick="selectTag('${t.replace(/'/g,"\\'")}'">${t}</div>`
     ).join('');
 
     if (hidden.length > 0) {
       row.innerHTML += `<div class="tag more-tag" onclick="toggleMoreTags()">更多 ▾</div>`;
       panel.innerHTML = hidden.map(t =>
-        `<div class="tag" onclick="selectTag('${t}')">${t}</div>`
+        `<div class="tag" onclick="selectTag('${t.replace(/'/g,"\\'")}'">${t}</div>`
       ).join('');
     }
   }
@@ -353,78 +369,68 @@
   }
 
   function renderPayment() {
-    const payLabel = document.getElementById('payLabel');
-    const payRow = document.getElementById('payRow');
-    const dropdown = document.getElementById('dropdown');
+    const top = mode === 'expense' ? EXPENSE_TOP3 : INCOME_TOP2;
+    const all = mode === 'expense' ? EXPENSE_ALL : INCOME_ALL;
 
-    if (mode === 'expense') {
-      payLabel.textContent = '付款方式';
-      const top3 = EXPENSE_TOP3;
-      const more = EXPENSE_MORE;
-      payRow.innerHTML = top3.map(p =>
-        `<div class="pay-chip" data-value="${p}" onclick="selectPayChip(this)">${p}</div>`
-      ).join('') + `<div class="pay-more" onclick="toggleDropdown()">更多 ▾</div>`;
-      dropdown.innerHTML = more.map(p =>
-        `<div class="dropdown-item" onclick="selectPayFromDropdown('${p}')">${p}</div>`
-      ).join('');
-    } else {
-      payLabel.textContent = '存入帳戶';
-      const top2 = INCOME_TOP2;
-      const more = INCOME_MORE;
-      payRow.innerHTML = top2.map(p =>
-        `<div class="pay-chip" data-value="${p}" onclick="selectPayChip(this)">${p}</div>`
-      ).join('') + `<div class="pay-more" onclick="toggleDropdown()">更多 ▾</div>`;
-      dropdown.innerHTML = more.map(p =>
-        `<div class="dropdown-item" onclick="selectPayFromDropdown('${p}')">${p}</div>`
-      ).join('');
-    }
+    document.getElementById('payLabel').textContent = mode === 'expense' ? '付款方式' : '存入帳戶';
+
+    const payRow = document.getElementById('payRow');
+    payRow.innerHTML = top.map(p =>
+      `<div class="pay-chip" data-value="${p}" onclick="selectPayChip(this)">${p}</div>`
+    ).join('') + `<div class="pay-more" onclick="toggleDropdown()">更多 ▾</div>`;
+
+    const dropdown = document.getElementById('dropdown');
+    dropdown.innerHTML = all.map(p =>
+      `<div class="dropdown-item" data-value="${p}" onclick="selectPayFromDropdown('${p}')">${p}</div>`
+    ).join('');
+    dropdown.classList.remove('open');
+
+    document.getElementById('paySelectedHint').style.display = 'none';
     selectedPayment = null;
   }
 
   function setPayment(val) {
     selectedPayment = val;
-    const chips = document.querySelectorAll('.pay-chip');
-    chips.forEach(c => {
-      c.style.borderColor = '#E0DED8';
-      c.style.background = '';
-      c.style.color = '#2C2C2A';
-      c.style.fontWeight = '';
-    });
-    let found = false;
-    chips.forEach(c => {
+    const top = mode === 'expense' ? EXPENSE_TOP3 : INCOME_TOP2;
+    const inTop = top.includes(val);
+
+    // 更新常用 chip 高亮
+    document.querySelectorAll('.pay-chip').forEach(c => {
       if (c.dataset.value === val) {
-        c.style.borderColor = '#185FA5';
-        c.style.background = '#E6F1FB';
-        c.style.color = '#185FA5';
-        c.style.fontWeight = '500';
-        found = true;
+        c.classList.add('pay-selected');
+      } else {
+        c.classList.remove('pay-selected');
       }
     });
-    if (!found) {
-      // 從更多選的，顯示在第一個 chip
-      const first = document.querySelector('.pay-chip');
-      if (first) {
-        first.dataset.value = val;
-        first.textContent = val;
-        first.style.borderColor = '#185FA5';
-        first.style.background = '#E6F1FB';
-        first.style.color = '#185FA5';
-        first.style.fontWeight = '500';
+
+    // 更新 dropdown 高亮
+    document.querySelectorAll('.dropdown-item').forEach(c => {
+      if (c.dataset.value === val) {
+        c.classList.add('item-selected');
+      } else {
+        c.classList.remove('item-selected');
       }
+    });
+
+    // 若從更多選的，顯示提示
+    const hint = document.getElementById('paySelectedHint');
+    if (!inTop) {
+      hint.textContent = `已選：${val}`;
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
     }
+
+    checkReady();
   }
 
   function selectPayChip(el) {
-    selectedPayment = el.dataset.value;
-    setPayment(selectedPayment);
-    checkReady();
+    setPayment(el.dataset.value);
   }
 
   function selectPayFromDropdown(val) {
-    selectedPayment = val;
     setPayment(val);
     document.getElementById('dropdown').classList.remove('open');
-    checkReady();
   }
 
   function toggleDropdown() {
@@ -433,21 +439,14 @@
 
   function switchMode(m) {
     mode = m;
-    const e = document.getElementById('toggleExpense');
-    const i = document.getElementById('toggleIncome');
-    if (m === 'expense') {
-      e.className = 'toggle active-expense';
-      i.className = 'toggle inactive';
-    } else {
-      e.className = 'toggle inactive';
-      i.className = 'toggle active-income';
-    }
+    document.getElementById('toggleExpense').className = m === 'expense' ? 'toggle active-expense' : 'toggle inactive';
+    document.getElementById('toggleIncome').className = m === 'income' ? 'toggle active-income' : 'toggle inactive';
     renderCategories();
   }
 
   function checkReady() {
     const amount = document.getElementById('amountInput').value;
-    document.getElementById('submitBtn').disabled = !(selectedCat && amount > 0 && selectedPayment);
+    document.getElementById('submitBtn').disabled = !(selectedCat && parseFloat(amount) > 0 && selectedPayment);
   }
 
   document.getElementById('amountInput').addEventListener('input', checkReady);
@@ -464,7 +463,9 @@
     const note = document.getElementById('noteInput').value.trim();
     const today = new Date().toISOString().slice(0, 10);
 
-    if (note) saveTag(selectedCat, note);
+    if (note && selectedCat) {
+      saveTagToStorage(selectedCat, note);
+    }
 
     const payload = {
       intent: mode === 'expense' ? '記錄支出' : '記錄收入',
@@ -488,7 +489,7 @@
       });
       showToast('✅ 完成！');
       setTimeout(() => liff.closeWindow(), 1500);
-    } catch (err) {
+    } catch(err) {
       showToast('❌ 送出失敗，請重試');
       document.getElementById('submitBtn').disabled = false;
       document.getElementById('submitBtn').textContent = '確認記帳';
@@ -503,7 +504,6 @@
     }
   }).catch(err => console.error(err));
 
-  // 初始化
   renderCategories();
 </script>
 </body>

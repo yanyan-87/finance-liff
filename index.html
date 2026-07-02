@@ -264,18 +264,15 @@
   };
 
   const EXPENSE_TOP3 = ['台新信用卡', '中信信用卡', '現金'];
-  const EXPENSE_ALL = ['台新信用卡','中信信用卡','現金','中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶','郵局信用卡','國泰信用卡'];
-
-  const INCOME_TOP2 = ['中信帳戶', '郵局帳戶'];
-  const INCOME_ALL = ['中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶'];
+  const EXPENSE_ALL  = ['台新信用卡','中信信用卡','現金','中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶','郵局信用卡','國泰信用卡'];
+  const INCOME_TOP2  = ['中信帳戶', '郵局帳戶'];
+  const INCOME_ALL   = ['中信帳戶','郵局帳戶','台新帳戶','新光帳戶','LINE Bank','國泰帳戶'];
 
   let mode = 'expense';
   let selectedCat = null;
-  let selectedCatColor = '#2C2C2A';
   let selectedPayment = null;
   let lineUserId = null;
 
-  // localStorage 存取
   function getTagData(cat) {
     try {
       const raw = localStorage.getItem('tags_v1_' + cat);
@@ -288,7 +285,7 @@
       const data = getTagData(cat);
       data[tag] = (data[tag] || 0) + 1;
       localStorage.setItem('tags_v1_' + cat, JSON.stringify(data));
-    } catch(e) { console.error('localStorage save error', e); }
+    } catch(e) { console.error('localStorage error', e); }
   }
 
   function getSortedTags(cat) {
@@ -298,17 +295,27 @@
       .map(e => e[0]);
   }
 
+  function bindTagClicks() {
+    document.querySelectorAll('#tagRow .tag, #morePanel .tag').forEach(el => {
+      if (!el.classList.contains('more-tag')) {
+        el.addEventListener('click', () => {
+          const noteInput = document.getElementById('noteInput');
+          noteInput.value = el.dataset.tag;
+          noteInput.focus();
+        });
+      }
+    });
+  }
+
   function renderCategories() {
     const cats = mode === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-    const grid = document.getElementById('catGrid');
-    grid.innerHTML = cats.map(c =>
+    document.getElementById('catGrid').innerHTML = cats.map(c =>
       `<div class="cat-chip" data-value="${c.value}" data-color="${c.color}" data-bg="${c.bg}" onclick="selectCat(this)">${c.icon} ${c.value}</div>`
     ).join('');
     selectedCat = null;
-    selectedCatColor = '#2C2C2A';
     document.getElementById('tagRow').innerHTML = '';
-    document.getElementById('morePanel').classList.remove('open');
     document.getElementById('morePanel').innerHTML = '';
+    document.getElementById('morePanel').classList.remove('open');
     document.getElementById('noteInput').value = '';
     renderPayment();
     checkReady();
@@ -326,7 +333,6 @@
     el.style.color = el.dataset.color;
     el.style.fontWeight = '500';
     selectedCat = el.dataset.value;
-    selectedCatColor = el.dataset.color;
 
     const def = mode === 'expense' ? EXPENSE_DEFAULTS[selectedCat] : null;
     if (def) setPayment(def);
@@ -339,6 +345,7 @@
     const row = document.getElementById('tagRow');
     const panel = document.getElementById('morePanel');
     panel.classList.remove('open');
+    panel.innerHTML = '';
 
     if (!selectedCat) { row.innerHTML = ''; return; }
 
@@ -349,42 +356,36 @@
     const hidden = sorted.slice(MAX_VISIBLE_TAGS);
 
     row.innerHTML = visible.map(t =>
-      `<div class="tag" onclick="selectTag('${t.replace(/'/g,"\\'")}'">${t}</div>`
+      `<div class="tag" data-tag="${t}">${t}</div>`
     ).join('');
 
     if (hidden.length > 0) {
-      row.innerHTML += `<div class="tag more-tag" onclick="toggleMoreTags()">更多 ▾</div>`;
+      row.innerHTML += `<div class="tag more-tag" id="moreTagBtn">更多 ▾</div>`;
       panel.innerHTML = hidden.map(t =>
-        `<div class="tag" onclick="selectTag('${t.replace(/'/g,"\\'")}'">${t}</div>`
+        `<div class="tag" data-tag="${t}">${t}</div>`
       ).join('');
+      document.getElementById('moreTagBtn').addEventListener('click', () => {
+        panel.classList.toggle('open');
+      });
     }
-  }
 
-  function toggleMoreTags() {
-    document.getElementById('morePanel').classList.toggle('open');
-  }
-
-  function selectTag(t) {
-    document.getElementById('noteInput').value = t;
+    bindTagClicks();
   }
 
   function renderPayment() {
     const top = mode === 'expense' ? EXPENSE_TOP3 : INCOME_TOP2;
-    const all = mode === 'expense' ? EXPENSE_ALL : INCOME_ALL;
+    const all  = mode === 'expense' ? EXPENSE_ALL  : INCOME_ALL;
 
     document.getElementById('payLabel').textContent = mode === 'expense' ? '付款方式' : '存入帳戶';
 
-    const payRow = document.getElementById('payRow');
-    payRow.innerHTML = top.map(p =>
+    document.getElementById('payRow').innerHTML = top.map(p =>
       `<div class="pay-chip" data-value="${p}" onclick="selectPayChip(this)">${p}</div>`
     ).join('') + `<div class="pay-more" onclick="toggleDropdown()">更多 ▾</div>`;
 
-    const dropdown = document.getElementById('dropdown');
-    dropdown.innerHTML = all.map(p =>
+    document.getElementById('dropdown').innerHTML = all.map(p =>
       `<div class="dropdown-item" data-value="${p}" onclick="selectPayFromDropdown('${p}')">${p}</div>`
     ).join('');
-    dropdown.classList.remove('open');
-
+    document.getElementById('dropdown').classList.remove('open');
     document.getElementById('paySelectedHint').style.display = 'none';
     selectedPayment = null;
   }
@@ -392,41 +393,25 @@
   function setPayment(val) {
     selectedPayment = val;
     const top = mode === 'expense' ? EXPENSE_TOP3 : INCOME_TOP2;
-    const inTop = top.includes(val);
 
-    // 更新常用 chip 高亮
     document.querySelectorAll('.pay-chip').forEach(c => {
-      if (c.dataset.value === val) {
-        c.classList.add('pay-selected');
-      } else {
-        c.classList.remove('pay-selected');
-      }
+      c.classList.toggle('pay-selected', c.dataset.value === val);
     });
-
-    // 更新 dropdown 高亮
     document.querySelectorAll('.dropdown-item').forEach(c => {
-      if (c.dataset.value === val) {
-        c.classList.add('item-selected');
-      } else {
-        c.classList.remove('item-selected');
-      }
+      c.classList.toggle('item-selected', c.dataset.value === val);
     });
 
-    // 若從更多選的，顯示提示
     const hint = document.getElementById('paySelectedHint');
-    if (!inTop) {
+    if (!top.includes(val)) {
       hint.textContent = `已選：${val}`;
       hint.style.display = 'block';
     } else {
       hint.style.display = 'none';
     }
-
     checkReady();
   }
 
-  function selectPayChip(el) {
-    setPayment(el.dataset.value);
-  }
+  function selectPayChip(el) { setPayment(el.dataset.value); }
 
   function selectPayFromDropdown(val) {
     setPayment(val);
@@ -440,13 +425,13 @@
   function switchMode(m) {
     mode = m;
     document.getElementById('toggleExpense').className = m === 'expense' ? 'toggle active-expense' : 'toggle inactive';
-    document.getElementById('toggleIncome').className = m === 'income' ? 'toggle active-income' : 'toggle inactive';
+    document.getElementById('toggleIncome').className  = m === 'income'  ? 'toggle active-income'  : 'toggle inactive';
     renderCategories();
   }
 
   function checkReady() {
-    const amount = document.getElementById('amountInput').value;
-    document.getElementById('submitBtn').disabled = !(selectedCat && parseFloat(amount) > 0 && selectedPayment);
+    const amount = parseFloat(document.getElementById('amountInput').value);
+    document.getElementById('submitBtn').disabled = !(selectedCat && amount > 0 && selectedPayment);
   }
 
   document.getElementById('amountInput').addEventListener('input', checkReady);
@@ -460,12 +445,10 @@
 
   async function handleSubmit() {
     const amount = parseFloat(document.getElementById('amountInput').value);
-    const note = document.getElementById('noteInput').value.trim();
-    const today = new Date().toISOString().slice(0, 10);
+    const note   = document.getElementById('noteInput').value.trim();
+    const today  = new Date().toISOString().slice(0, 10);
 
-    if (note && selectedCat) {
-      saveTagToStorage(selectedCat, note);
-    }
+    if (note && selectedCat) saveTagToStorage(selectedCat, note);
 
     const payload = {
       intent: mode === 'expense' ? '記錄支出' : '記錄收入',
